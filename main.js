@@ -242,11 +242,13 @@ class Game
 
             this.chain[this.chain.length - 1].march(this.target);
 
+            // March each sticks from tip to root (Forward reach)
             for (let i = this.chain.length - 2; i >= 0; i--)
             {
                 this.chain[i].march(this.chain[i + 1].tail);
             }
 
+            // If root is fixed, march backward (Backward reach)
             if (this.fixedPoint == undefined) return;
 
             this.chain[0].march(this.fixedPoint, true);
