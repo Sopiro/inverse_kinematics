@@ -13,14 +13,121 @@ let fps;
 let started = false;
 let pause = false;
 
-let time;
-
 // Inputs
 let keys = {};
-let mouse = { down: false, lastX: 0.0, lastY: 0.0, currX: 0.0, currY: 0.0, dx: 0.0, dy: 0.0 };
+let mouse = { lastDown: false, currDown: false, lastX: 0.0, lastY: 0.0, currX: 0.0, currY: 0.0, dx: 0.0, dy: 0.0 };
 
 let renderer;
 let game;
+
+class Vector2
+{
+    constructor(x, y)
+    {
+        this.x = x;
+        this.y = y;
+    }
+
+    normalize()
+    {
+        const len = this.getLength();
+
+        this.x /= len;
+        this.y /= len;
+    }
+
+    normalized()
+    {
+        const len = this.getLength();
+
+        return new Vector2(this.x / len, this.y / len);
+    }
+
+    getLength()
+    {
+        return Math.sqrt(this.x * this.x + this.y * this.y);
+    }
+
+    dot(v)
+    {
+        return this.x * v.x + this.y * v.y;
+    }
+
+    cross(v)
+    {
+        return this.y * v.x - this.x * v.y;
+    }
+
+    add(v)
+    {
+        return new Vector2(this.x + v.x, this.y + v.y);
+    }
+
+    sub(v)
+    {
+        return new Vector2(this.x - v.x, this.y - v.y);
+    }
+
+    div(v)
+    {
+        return new Vector2(this.x / v, this.y / v);
+    }
+
+    mul(v)
+    {
+        return new Vector2(this.x * v, this.y * v);
+    }
+
+    equals(v)
+    {
+        return this.x == v.x && this.y == v.y;
+    }
+}
+
+class Stick
+{
+    constructor(head, tail, length)
+    {
+        this.head = head;
+        this.tail = tail;
+
+        if (length == undefined)
+        {
+            this.length = head.sub(tail).getLength();
+        }
+        else
+        {
+            this.length = length;
+            this.march(head);
+        }
+    }
+
+    march(target, tail = false)
+    {
+        let dir = this.tail.sub(target).normalized();
+        if (tail) dir = this.head.sub(target).normalized();
+
+        if (dir.getLength() == 0) return;
+
+        if (tail)
+        {
+            this.tail = target;
+            this.head = this.tail.add(dir.mul(this.length));
+        }
+        else
+        {
+            this.head = target;
+            this.tail = this.head.add(dir.mul(this.length));
+        }
+    }
+
+    render(r, tailFilled = false)
+    {
+        r.drawCircle(this.head.x, this.head.y, 5, false, true);
+        r.drawCircle(this.tail.x, this.tail.y, 5, tailFilled, true);
+        r.drawLine(this.head.x, this.head.y, this.tail.x, this.tail.y, 1);
+    }
+}
 
 class Renderer
 {
@@ -72,7 +179,7 @@ class Renderer
         gfx.stroke();
     }
 
-    drawText(x, y, content, fontSize = 20)
+    drawText(x, y, content, fontSize = 15)
     {
         gfx.font = fontSize + "px verdana";
         gfx.fillText(content, x, y);
@@ -84,33 +191,103 @@ class Game
     constructor(renderer)
     {
         this.r = renderer;
+        this.chain = [];
+        this.fixedPoint = new Vector2(100, 100);
+        this.operate = true;
+
+        const stride = 20;
+
+        for (let i = 0; i < 30; i++)
+        {
+            this.chain.push(new Stick(new Vector2(100 + (i + 1) * stride, 100), new Vector2(100 + i * stride, 100)));
+        }
+
+        this.destination = this.chain[this.chain.length - 1].head;
+        this.target = this.destination;
     }
 
     update(delta)
     {
-        // Game Logic Here
+        const mousePos = new Vector2(mouse.currX, mouse.currY);
+
+        // When Mouse Down
+        if (!mouse.lastDown && mouse.currDown)
+        {
+            if (this.fixedPoint != undefined)
+            {
+                if (mousePos.sub(this.fixedPoint).getLength() < 30)
+                {
+                    this.fixedPoint = undefined;
+                    this.operate = false;
+                }
+            }
+            else 
+            {
+                if (mousePos.sub(this.chain[0].tail).getLength() < 30)
+                {
+                    this.fixedPoint = this.chain[0].tail;
+                    this.operate = false;
+                }
+            }
+        }
+        // When Mouse UP
+        if (mouse.lastDown && !mouse.currDown) this.operate = true;
+
+        if (this.operate)
+        {
+            if (mouse.currDown) this.destination = mousePos;
+
+            const ratio = 1 / fps * 2;
+            this.target = this.target.mul(1 - ratio).add(this.destination.mul(ratio));
+
+            this.chain[this.chain.length - 1].march(this.target);
+
+            for (let i = this.chain.length - 2; i >= 0; i--)
+            {
+                this.chain[i].march(this.chain[i + 1].tail);
+            }
+
+            if (this.fixedPoint == undefined) return;
+
+            this.chain[0].march(this.fixedPoint, true);
+
+            for (let i = 1; i < this.chain.length; i++)
+            {
+                this.chain[i].march(this.chain[i - 1].head, true);
+            }
+        }
     }
 
     render()
     {
-        // Render Code Here
+        for (let i = 1; i < this.chain.length; i++)
+        {
+            this.chain[i].render(this.r);
+        }
 
-        this.r.drawCircle(100, 100, 10, true);
-        this.r.drawRect(100, 100, 40, 40, false, true);
+        if (this.fixedPoint != undefined)
+        {
+            this.r.drawText(this.fixedPoint.x - 15, this.fixedPoint.y - 15, "Fixed!", 15);
+            this.chain[0].render(this.r, true);
+        }
+        else
+        {
+            this.chain[0].render(this.r, false);
+        }
 
-        this.r.drawLine(100, 100, mouse.currX, mouse.currY, Math.dist(100, 100, mouse.currX, mouse.currY) / 50);;
-        this.r.drawText(mouse.currX, mouse.currY, "ㅇㅅㅇ");
+        this.r.drawCircle(this.destination.x, this.destination.y, 5, true, true);
     }
 }
 
 function update(delta)
 {
+    game.update(delta);
+
     mouse.dx = mouse.currX - mouse.lastX;
     mouse.dy = mouse.currY - mouse.lastY;
     mouse.lastX = mouse.currX;
     mouse.lastY = mouse.currY;
-
-    game.update(delta);
+    mouse.lastDown = mouse.currDown;
 }
 
 function render()
@@ -139,13 +316,13 @@ function init()
     {
         if (e.button != 0) return;
 
-        mouse.down = true;
+        mouse.currDown = true;
     }, false);
     window.addEventListener("mouseup", (e) =>
     {
         if (e.button != 0) return;
 
-        mouse.down = false;
+        mouse.currDown = false;
     }, false);
     window.addEventListener("keydown", (e) =>
     {
@@ -195,10 +372,7 @@ function run()
     const now = performance.now();
     while (times.length > 0 && times[0] <= now - 1000) times.shift();
 
-    let delta = (now - times[times.length - 1]) / 1000.0;
-    // console.log("frame time:", delta * 1000.0);
-
-    time = now / 1000.0;
+    let delta = (now - times[times.length - 1]) / 100;
 
     times.push(now);
     fps = times.length;
@@ -213,8 +387,6 @@ function run()
     {
         update(delta);
         render();
-
-        console.log(time);
     }
     else if (pause)
     {
