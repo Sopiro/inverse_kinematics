@@ -1,9 +1,9 @@
 # Inverse Kinematics
 
 A simple implementation of [FABRIK inverse kinematics](https://en.wikipedia.org/wiki/Inverse_kinematics#Heuristic_Methods).  
-Written in vanilla javascript.  
 
-Playable at [here](https://sopiro.github.io/inverse_kinematics)
+Video: https://youtu.be/z7_WF7l2JgI  
+Live Demo: https://sopiro.github.io/inverse_kinematics  
 
 ## Preview
 
